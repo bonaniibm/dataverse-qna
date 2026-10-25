@@ -18,8 +18,9 @@ See [docs/technical-design.md](docs/technical-design.md) for the full design.
 | Health | `run_health_checks`, `get_table_stats` |
 | Generic (read-only) | `dataverse_read`, `describe_table`, `query_telemetry` (App Insights) |
 
-The agent is Claude Opus 5.5 on Microsoft Foundry. Tools fetch and compute deterministically; Claude decides which to call
-and explains the results. Quick checks in the UI run tools directly, so they work even without the LLM.
+The agent runs on Microsoft Foundry: Claude Opus 5.5 by design, or any OpenAI-compatible Foundry model (currently Grok 4.6,
+because the development subscription has no Claude quota). Tools fetch and compute deterministically; the model decides which
+to call and explains the results. Quick checks in the UI run tools directly, so they work even without the LLM.
 
 **Read-only by design:** the Dataverse client only sends `GET` requests and only calls allow-listed read functions. Unit tests enforce this.
 
@@ -50,15 +51,17 @@ Settings come from `src/DvQna.Host/appsettings.json`, then `%LOCALAPPDATA%\Datav
 {
   "Auth": { "ClientId": "<shared app registration client id>" },
   "Llm": {
-    "Provider": "foundry",
+    "Provider": "foundry-openai",      // "foundry" = Claude (Anthropic SDK); "foundry-openai" = Grok, gpt-oss, DeepSeek…
     "FoundryResource": "<foundry resource name>",
-    "FoundryAuth": "entra",            // or "apikey" (then run: dvqna set-foundry-key)
+    "FoundryAuth": "apikey",           // run: dvqna set-foundry-key  (or "entra" with the Cognitive Services User role)
     "FoundryTenantId": "<tenant of the Foundry resource>",
-    "Deployment": "claude-opus-5-5",
+    "Deployment": "grok-4.6",          // or "claude-opus-5-5" with Provider "foundry"
     "Effort": "medium"
   }
 }
 ```
+
+To try another deployment without editing files: `set DVQNA_Llm__Deployment=gpt-oss-120b`.
 
 ## CLI
 
@@ -68,6 +71,7 @@ dvqna env list
 dvqna discover <tenant-id>                                 # list environments you can access
 dvqna tool                                                 # list tools
 dvqna tool get_running_jobs '{"env":"PROD"}'               # run a tool without the LLM
+dvqna ask PROD "Is the async queue healthy?"               # one full agent turn in the terminal
 dvqna set-foundry-key                                      # store a Foundry key (DPAPI-encrypted)
 dvqna status
 ```

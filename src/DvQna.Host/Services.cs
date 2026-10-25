@@ -5,6 +5,10 @@ using Anthropic.Foundry;
 using Azure.Core;
 using DvQna.Auth;
 using DvQna.Core;
+using DvQna.Agent;
+using OpenAI;
+using OpenAI.Chat;
+using System.ClientModel;
 
 namespace DvQna.Host;
 
@@ -32,8 +36,48 @@ public sealed class SecretStore(AppSettings settings)
 
 public static class LlmClientFactory
 {
-    /// <summary>Returns null when the LLM isn't configured yet; the UI then shows setup guidance.</summary>
-    public static IAnthropicClient? Create(AppSettings settings, SecretStore secrets, out string status)
+    /// <summary>
+    /// Builds the model provider from settings. Returns null when the LLM isn't configured yet; the UI then shows setup guidance.
+    /// Providers: "foundry" (Claude on Foundry, the design's default), "foundry-openai" (OpenAI-compatible Foundry models
+    /// such as Grok or gpt-oss), "anthropic" (developer fallback).
+    /// </summary>
+    public static IModelProvider? CreateProvider(AppSettings settings, SecretStore secrets, out string status)
+    {
+        var llm = settings.Llm;
+        if (llm.Provider.Equals("foundry-openai", StringComparison.OrdinalIgnoreCase))
+            return CreateOpenAiCompatible(llm, secrets, out status);
+        var client = Create(settings, secrets, out status);
+        return client is null ? null : new ClaudeProvider(client, llm, status);
+    }
+
+    private static IModelProvider? CreateOpenAiCompatible(LlmSettings llm, SecretStore secrets, out string status)
+    {
+        if (string.IsNullOrWhiteSpace(llm.FoundryResource))
+        {
+            status = "Foundry resource not configured (Llm:FoundryResource).";
+            return null;
+        }
+        var options = new OpenAIClientOptions { Endpoint = OpenAiCompatibleProvider.Endpoint(llm.FoundryResource) };
+        ChatClient chat;
+        if (llm.FoundryAuth.Equals("apikey", StringComparison.OrdinalIgnoreCase))
+        {
+            var key = Environment.GetEnvironmentVariable("DVQNA_FOUNDRY_KEY") ?? secrets.Get("foundry-key");
+            if (key is null) { status = "Foundry API key not set. Run: dvqna set-foundry-key"; return null; }
+            chat = new ChatClient(llm.Deployment, new ApiKeyCredential(key), options);
+            status = $"Microsoft Foundry {llm.FoundryResource} / {llm.Deployment} (API key)";
+        }
+        else
+        {
+            var tenant = llm.FoundryTenantId ?? throw new InvalidOperationException("Llm:FoundryTenantId is required for Entra authentication.");
+#pragma warning disable OPENAI001 // AuthenticationPolicy constructor is marked experimental
+            chat = new ChatClient(llm.Deployment, new OpenAiCompatibleProvider.TokenPolicy(new AzureCliTokenProvider(), tenant, "https://cognitiveservices.azure.com/.default"), options);
+#pragma warning restore OPENAI001
+            status = $"Microsoft Foundry {llm.FoundryResource} / {llm.Deployment} (Entra via Azure CLI)";
+        }
+        return new OpenAiCompatibleProvider(chat, llm, status);
+    }
+
+    private static IAnthropicClient? Create(AppSettings settings, SecretStore secrets, out string status)
     {
         var llm = settings.Llm;
         if (llm.Provider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))

@@ -10,6 +10,7 @@ using DvQna.Storage;
 using DvQna.Tools;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
 
+Console.OutputEncoding = System.Text.Encoding.UTF8;
 var verb = args.FirstOrDefault(a => !a.StartsWith('-'))?.ToLowerInvariant() ?? "serve";
 var rest = args.SkipWhile(a => a.StartsWith('-')).Skip(1).ToArray();
 
@@ -41,8 +42,8 @@ builder.Services.AddSingleton<ToolRegistry>();
 builder.Services.AddSingleton<ToolContext>();
 builder.Services.AddSingleton(sp =>
 {
-    var client = LlmClientFactory.Create(settings, sp.GetRequiredService<SecretStore>(), out var status);
-    return new LlmState(client is null ? null : new Orchestrator(client, sp.GetRequiredService<ToolRegistry>(), sp.GetRequiredService<ToolContext>(),
+    var provider = LlmClientFactory.CreateProvider(settings, sp.GetRequiredService<SecretStore>(), out var status);
+    return new LlmState(provider is null ? null : new Orchestrator(provider, sp.GetRequiredService<ToolRegistry>(), sp.GetRequiredService<ToolContext>(),
         sp.GetRequiredService<AppStore>(), settings, sp.GetRequiredService<ILogger<Orchestrator>>()), status);
 });
 builder.Logging.SetMinimumLevel(LogLevel.Warning).AddFilter("DvQna", LogLevel.Information);
@@ -57,6 +58,7 @@ switch (verb)
     case "serve": break;
     case "tool": return await Cli.RunToolAsync(app.Services, rest);
     case "env": return await Cli.EnvAsync(app.Services, rest);
+    case "ask": return await Cli.AskAsync(app.Services, rest);
     case "discover": return await Cli.DiscoverAsync(app.Services, rest);
     case "set-foundry-key": return Cli.SetSecret(app.Services, "foundry-key");
     case "status":

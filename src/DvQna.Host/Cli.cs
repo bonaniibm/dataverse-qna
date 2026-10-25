@@ -63,6 +63,30 @@ internal static class Cli
         return 0;
     }
 
+    /// <summary>dvqna ask &lt;env&gt; "question" — runs one full agent turn and prints tool activity and the answer.</summary>
+    public static async Task<int> AskAsync(IServiceProvider sp, string[] args)
+    {
+        if (args.Length < 2) { Console.Error.WriteLine("Usage: dvqna ask <env> \"question\""); return 1; }
+        var llm = sp.GetRequiredService<LlmState>();
+        if (llm.Orchestrator is null) { Console.Error.WriteLine("LLM not configured: " + llm.Status); return 1; }
+        Console.WriteLine($"[model] {llm.Status}");
+        var reader = llm.Orchestrator.Run(new DvQna.Agent.ChatRequest { Env = args[0], Message = string.Join(' ', args.Skip(1)) }, CancellationToken.None);
+        await foreach (var e in reader.ReadAllAsync())
+        {
+            var json = JsonSerializer.SerializeToElement(e.Data, Json.Options);
+            string P(string n) => json.TryGetProperty(n, out var v) ? v.ToString() : "";
+            switch (e.Type)
+            {
+                case "tool_start": Console.WriteLine($"[tool] {P("name")} {P("input")}"); break;
+                case "tool_end": Console.WriteLine($"   -> {(P("error") is { Length: > 0 } err ? "ERROR " + err : P("summary"))} ({P("ms")} ms)"); break;
+                case "text": Console.WriteLine("\n" + P("text")); break;
+                case "error": Console.WriteLine("[error] " + P("message")); break;
+                case "done": Console.WriteLine($"\n[done] {P("tool_calls")} tool call(s), usage {P("usage")}"); break;
+            }
+        }
+        return 0;
+    }
+
     public static int SetSecret(IServiceProvider sp, string name)
     {
         Console.Write($"Paste the value for '{name}' and press Enter: ");

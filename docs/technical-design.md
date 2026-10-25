@@ -17,6 +17,7 @@
 | D2 | **Claude on Microsoft Foundry** is the LLM route | 2026-10-25 | §8.7. The design avoids Claude API features Foundry doesn't offer (mid-conversation system messages, server-side refusal fallbacks) |
 | D3 | **One shared multi-tenant app registration**, owned by the AMS organisation, used across all customer tenants | 2026-10-25 | §7.1. Each customer tenant gives admin consent once; publisher verification needed |
 | D4 | **Read-only by design.** No write tools, now or on the roadmap | 2026-10-25 | §11.4. Write actions removed from the tool catalogue and roadmap; read-only enforced in code |
+| D5 | **Interim model: Grok 4.6 on Foundry** (OpenAI-compatible endpoint) until Claude quota is granted | 2026-10-25 | The development subscription has 0 Claude quota. The agent loop is provider-neutral (`IModelProvider`): `Llm:Provider = foundry` runs Claude, `foundry-openai` runs Grok 4.6 / gpt-oss-120b. In side-by-side tests Grok 4.6 gave correct diagnoses; gpt-oss-120b misread recurring platform jobs as stuck |
 
 ---
 
