@@ -1,0 +1,24 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, Arial","fontSize":"15px","primaryColor":"#eef3ff","primaryBorderColor":"#2563eb","lineColor":"#475569","primaryTextColor":"#1c2430"}}}%%
+flowchart LR
+  subgraph PC["Admin workstation · 127.0.0.1 only"]
+    UI["React UI<br/>chat · quick checks · evidence"]
+    HOST["ASP.NET Core host<br/>SSE · per-launch token"]
+    AGENT["Agent loop<br/>provider-neutral · redaction · audit"]
+    TOOLS["18 read-only diagnostic tools"]
+    ENG["Deterministic engines<br/>role diff · pipeline · health rules · stats"]
+    READER["Read-only Dataverse reader<br/>GET only · function allow-list"]
+    STORE[("SQLite<br/>chats · datasets · audit log")]
+  end
+  subgraph MS["Microsoft cloud"]
+    DV["Dataverse Web API<br/>(each environment)"]
+    ENTRA["Entra ID<br/>shared multi-tenant app"]
+    AI["App Insights<br/>(optional)"]
+    FOUNDRY["Microsoft Foundry<br/>Claude · Grok · gpt-oss"]
+  end
+  UI <--> HOST --> AGENT
+  AGENT <--> FOUNDRY
+  AGENT --> TOOLS --> ENG
+  TOOLS --> READER --> DV
+  TOOLS --> AI
+  READER -. token .-> ENTRA
+  HOST --> STORE

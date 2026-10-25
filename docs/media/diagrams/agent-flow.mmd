@@ -1,0 +1,20 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, Arial","fontSize":"15px","actorBkg":"#eef3ff","actorBorder":"#2563eb","noteBkgColor":"#fff6e0","noteBorderColor":"#d9a400"}}}%%
+sequenceDiagram
+  autonumber
+  actor A as Admin / AMS engineer
+  participant UI as Dataverse QnA
+  participant M as LLM (Foundry)
+  participant T as Read-only tools
+  participant D as Dataverse
+  A->>UI: "What runs when an appointment is updated?<br/>Is anything likely to slow saves?"
+  UI->>M: question + environment context + tool list
+  M->>T: get_message_pipeline(ORG72, appointment, Update)
+  T->>D: GET sdkmessageprocessingsteps, workflows, callbackregistrations
+  D-->>T: rows
+  T-->>M: ordered pipeline + anti-pattern flags (summary + top rows)
+  M->>T: get_plugin_performance · get_recent_changes (in parallel)
+  T->>D: GET plugintracelogs, msdyn_solutionhistories, ...
+  T-->>M: "trace logging Off" · change timeline
+  Note over T,UI: Full result sets go to the evidence panel,<br/>not into the prompt
+  M-->>UI: Summary · Findings · Likely cause · Next steps · Sources
+  UI-->>A: Answer + clickable evidence tables

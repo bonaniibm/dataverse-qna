@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Segoe UI, Arial","fontSize":"15px","primaryColor":"#eef3ff","primaryBorderColor":"#2563eb","lineColor":"#475569"}}}%%
+flowchart TB
+  A["Add environment URL<br/>e.g. https://contoso.crm.dynamics.com"] --> B["Anonymous probe → 401 challenge<br/>reveals the owning tenant"]
+  B --> C["MSAL sign-in in the system browser<br/>against that tenant (shared multi-tenant public client)"]
+  C --> D{"First time in<br/>this tenant?"}
+  D -- yes --> E["Consent: 'Access Dynamics 365 as you'<br/>(admin can consent for the whole org)"]
+  D -- no --> F["Silent token from encrypted cache (DPAPI)"]
+  E --> G["Delegated token: the tool sees only<br/>what the signed-in admin can see"]
+  F --> G
+  G --> H["Read-only reader:<br/>GET only · allow-listed functions · 4 concurrent calls · honours 429 Retry-After"]
