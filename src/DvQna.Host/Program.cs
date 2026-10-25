@@ -29,7 +29,7 @@ Directory.CreateDirectory(settings.DataDirectory);
 builder.Services.AddSingleton(settings);
 builder.Services.AddSingleton<ITokenProvider>(sp => settings.Auth.Mode.Equals("azcli", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(settings.Auth.ClientId)
     ? new AzureCliTokenProvider()
-    : new MsalTokenProvider(settings.Auth.ClientId!, settings.DataDirectory, sp.GetRequiredService<ILogger<MsalTokenProvider>>()));
+    : new MsalTokenProvider(settings.Auth.ClientId!, settings.DataDirectory, sp.GetRequiredService<ILogger<MsalTokenProvider>>()) { UseBroker = settings.Auth.UseBroker });
 builder.Services.AddSingleton<IDataverseReader, DataverseReader>();
 builder.Services.AddSingleton<AppInsightsReader>();
 builder.Services.AddSingleton<GlobalDiscovery>();
@@ -92,7 +92,7 @@ var jsonOut = Json.Options;
 
 api.MapGet("/status", (LlmState llm, ProfileStore profiles, ToolRegistry reg) => HttpResults.Json(new
 {
-    llmReady = llm.Orchestrator is not null, llmStatus = llm.Status, authMode = settings.Auth.Mode,
+    llmReady = llm.Orchestrator is not null, llmStatus = llm.Status, authMode = string.IsNullOrEmpty(settings.Auth.ClientId) ? "azcli (no ClientId configured)" : settings.Auth.Mode,
     environments = profiles.All().Count, tools = reg.Tools.Select(t => new { t.Name, t.Description }),
 }, jsonOut));
 

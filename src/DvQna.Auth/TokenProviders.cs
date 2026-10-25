@@ -30,8 +30,24 @@ public sealed class MsalTokenProvider : ITokenProvider
         _log = log;
     }
 
+    public bool UseBroker { get; init; }
+
+    /// <summary>
+    /// Requests named delegated scopes instead of ".default" so consent is asked for at sign-in
+    /// (dynamic consent); the app registration then needs no pre-configured API permissions.
+    /// </summary>
+    internal static string[] ToDelegatedScopes(string[] scopes) => scopes.Select(s =>
+    {
+        if (!s.EndsWith("/.default", StringComparison.Ordinal)) return s;
+        var resource = s[..^"/.default".Length];
+        return resource.Contains("api.loganalytics.io", StringComparison.OrdinalIgnoreCase)
+            ? resource + "/Data.Read"
+            : resource.Contains("dynamics.com", StringComparison.OrdinalIgnoreCase) ? resource + "/user_impersonation" : s;
+    }).ToArray();
+
     public async Task<string> GetTokenAsync(string tenantId, string[] scopes, CancellationToken ct)
     {
+        scopes = ToDelegatedScopes(scopes);
         var app = await _apps.GetOrAdd(tenantId, t => new(() => CreateAppAsync(t))).Value;
         var accounts = (await app.GetAccountsAsync()).ToList();
         var account = accounts.FirstOrDefault(a => a.HomeAccountId?.TenantId == tenantId) ?? accounts.FirstOrDefault();
@@ -50,8 +66,15 @@ public sealed class MsalTokenProvider : ITokenProvider
         {
             _log.LogInformation("Interactive sign-in for tenant {Tenant}", tenantId);
             var builder = app.AcquireTokenInteractive(scopes).WithPrompt(Prompt.SelectAccount);
-            var hwnd = NativeMethods.GetConsoleOrTerminalWindow();
-            if (hwnd != IntPtr.Zero) builder = builder.WithParentActivityOrWindow(hwnd);
+            if (UseBroker)
+            {
+                var hwnd = NativeMethods.GetConsoleOrTerminalWindow();
+                if (hwnd != IntPtr.Zero) builder = builder.WithParentActivityOrWindow(hwnd);
+            }
+            else
+            {
+                builder = builder.WithUseEmbeddedWebView(false);
+            }
             var result = await builder.ExecuteAsync(ct);
             return result.AccessToken;
         }
@@ -67,7 +90,7 @@ public sealed class MsalTokenProvider : ITokenProvider
             .WithAuthority($"https://login.microsoftonline.com/{tenantId}")
             .WithDefaultRedirectUri()
             .WithClientName("Dataverse QnA");
-        if (OperatingSystem.IsWindows() && NativeMethods.GetConsoleOrTerminalWindow() != IntPtr.Zero)
+        if (UseBroker && OperatingSystem.IsWindows() && NativeMethods.GetConsoleOrTerminalWindow() != IntPtr.Zero)
         {
             builder = builder.WithBroker(new BrokerOptions(BrokerOptions.OperatingSystems.Windows) { Title = "Dataverse QnA" });
         }

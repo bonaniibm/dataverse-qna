@@ -64,6 +64,8 @@ public sealed class AuthSettings
     /// <summary>"msal" (default, shared multi-tenant public client) or "azcli" (developer fallback).</summary>
     public string Mode { get; set; } = "msal";
     public string? ClientId { get; set; }
+    /// <summary>Use the Windows WAM broker. Off by default: on a device joined to another tenant WAM pre-selects that work account.</summary>
+    public bool UseBroker { get; set; }
 }
 
 public sealed class LlmSettings

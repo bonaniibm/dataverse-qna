@@ -14,6 +14,10 @@ public sealed class RunHealthChecksTool : Tool
 
     private sealed record Finding(string Id, string Severity, string Title, string Evidence, string Fix);
 
+    internal static bool IsFirstParty(string handler) =>
+        handler.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase) || handler.StartsWith("MetadataAudit", StringComparison.OrdinalIgnoreCase)
+        || handler.StartsWith("Microsoft ", StringComparison.OrdinalIgnoreCase) || handler.StartsWith("ObjectModel", StringComparison.OrdinalIgnoreCase);
+
     public override async Task<ToolResult> RunAsync(ToolArgs args, ToolContext ctx, CancellationToken ct)
     {
         var env = ctx.Env(args.Str("env"));
@@ -29,8 +33,13 @@ public sealed class RunHealthChecksTool : Tool
         await Check("Plug-in steps", async () =>
         {
             var steps = (await dv.QueryAsync(env, "sdkmessageprocessingsteps",
-                "$select=name,stage,mode,filteringattributes,statecode,asyncautodelete&$expand=sdkmessageid($select=name),sdkmessagefilterid($select=primaryobjecttypecode)&$filter=customizationlevel eq 1 and ishidden/Value eq false",
+                "$select=name,stage,mode,filteringattributes,statecode,asyncautodelete&$expand=sdkmessageid($select=name),sdkmessagefilterid($select=primaryobjecttypecode),plugintypeid($select=typename)&$filter=customizationlevel eq 1 and ishidden/Value eq false",
                 5000, ct)).Rows;
+            // Microsoft first-party handlers cannot be changed by admins, so they are not findings.
+            static string Handler(Dictionary<string, object?> s) => (s.TryGetValue("plugintypeid", out var p) ? (p as Dictionary<string, object?>)?.S("typename") : null) ?? s.S("name") ?? "";
+            var firstParty = steps.Count(s => IsFirstParty(Handler(s)));
+            steps = steps.Where(s => !IsFirstParty(Handler(s))).ToList();
+            if (firstParty > 0) warnings.Add($"{firstParty} Microsoft first-party plug-in step(s) excluded from plug-in findings.");
             string Msg(Dictionary<string, object?> s) => (s.TryGetValue("sdkmessageid", out var m) ? (m as Dictionary<string, object?>)?.S("name") : null) ?? "";
             string Ent(Dictionary<string, object?> s) => (s.TryGetValue("sdkmessagefilterid", out var f) ? (f as Dictionary<string, object?>)?.S("primaryobjecttypecode") : null) ?? "any";
             var active = steps.Where(s => s.S("statecode") == "0").ToList();

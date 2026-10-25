@@ -53,7 +53,7 @@ public sealed class GetRecentChangesTool : Tool
 {
     public override string Name => "get_recent_changes";
     public override string Description =>
-        "Change timeline for an environment: solution imports/upgrades/uninstalls (solution history), plug-in assembly updates, plug-in step changes, " +
+        "Change timeline for an environment: solution imports/upgrades/uninstalls (solution history), plug-in assembly updates, and direct (unmanaged) edits to plug-in steps, " +
         "classic workflow and cloud flow changes, form and web resource changes. Use to correlate a slowdown or error with a deployment.";
     public override JsonObject Schema => S.Obj(S.Env(), S.Hours(72, 720));
 
@@ -84,16 +84,24 @@ public sealed class GetRecentChangesTool : Tool
                   $"{r.Label("msdyn_suboperation")} · {r.Label("msdyn_status")}" + (string.IsNullOrEmpty(r.S("msdyn_exceptionmessage")) ? "" : " · " + Results.FirstLine(r.S("msdyn_exceptionmessage"))), null));
         await Add("Plug-in assembly", "pluginassemblies", $"$select=name,version,modifiedon,_modifiedby_value&$filter=modifiedon ge {since} and ishidden/Value eq false",
             r => (r.S("modifiedon"), $"{r.S("name")} {r.S("version")}", null, r.Label("_modifiedby_value")));
-        await Add("Plug-in step", "sdkmessageprocessingsteps", $"$select=name,statecode,modifiedon,_modifiedby_value&$filter=modifiedon ge {since} and customizationlevel eq 1",
+        await Add("Plug-in step", "sdkmessageprocessingsteps", $"$select=name,statecode,modifiedon,_modifiedby_value&$filter=modifiedon ge {since} and customizationlevel eq 1 and ismanaged eq false",
             r => (r.S("modifiedon"), r.S("name") ?? "", r.Label("statecode"), r.Label("_modifiedby_value")));
-        await Add("Process/flow", "workflows", $"$select=name,category,statecode,modifiedon,_modifiedby_value&$filter=modifiedon ge {since} and type eq 1",
+        await Add("Process/flow", "workflows", $"$select=name,category,statecode,modifiedon,_modifiedby_value&$filter=modifiedon ge {since} and type eq 1 and ismanaged eq false",
             r => (r.S("modifiedon"), r.S("name") ?? "", $"{r.Label("category")} · {r.Label("statecode")}", r.Label("_modifiedby_value")));
-        await Add("Form", "systemforms", $"$select=name,objecttypecode,modifiedon,_modifiedby_value&$filter=modifiedon ge {since}",
+        await Add("Form", "systemforms", $"$select=name,objecttypecode,modifiedon,_modifiedby_value&$filter=modifiedon ge {since} and ismanaged eq false",
             r => (r.S("modifiedon"), $"{r.S("objecttypecode")}: {r.S("name")}", null, r.Label("_modifiedby_value")));
-        await Add("Web resource", "webresourceset", $"$select=name,modifiedon,_modifiedby_value&$filter=modifiedon ge {since} and ishidden/Value eq false",
+        await Add("Web resource", "webresourceset", $"$select=name,modifiedon,_modifiedby_value&$filter=modifiedon ge {since} and ismanaged eq false",
             r => (r.S("modifiedon"), r.S("name") ?? "", null, r.Label("_modifiedby_value")));
 
-        rows = rows.OrderByDescending(r => r.S("when")).ToList();
+        // Collapse repeated changes to the same item (e.g. platform-generated steps re-saved on every publish).
+        rows = rows.GroupBy(r => (r.S("kind"), r.S("what")))
+            .Select(g =>
+            {
+                var latest = g.OrderByDescending(r => r.S("when")).First();
+                if (g.Count() > 1) latest["times"] = g.Count();
+                return latest;
+            })
+            .OrderByDescending(r => r.S("when")).ToList();
         var byKind = string.Join(", ", rows.GroupBy(r => r["kind"]).Select(g => $"{g.Count()} {g.Key}"));
         return Results.Table(rows.Count == 0 ? $"No tracked changes in the last {hours}h." : $"{rows.Count} change(s) in the last {hours}h: {byKind}. Latest: {rows[0]["when"]} {rows[0]["kind"]} {rows[0]["what"]}.",
             rows, Results.Src(env, "msdyn_solutionhistory, pluginassembly, sdkmessageprocessingstep, workflow, systemform, webresource", null, Results.Window(hours)),

@@ -18,10 +18,10 @@ internal static class RoleLoader
                 r.S("ismanaged") == "True"))
             .Where(r => names.Count == 0 || names.Any(n => r.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
             .ToList();
-        if (roles.Count == 0) return new RoleSnapshot(env.Name, roles, []);
-
         var privNames = (await dv.QueryAsync(env, "privileges", "$select=privilegeid,name", 20000, ct)).Rows
             .ToDictionary(r => r.S("privilegeid")!, r => r.S("name")!, StringComparer.OrdinalIgnoreCase);
+        var defined = new HashSet<string>(privNames.Values, StringComparer.OrdinalIgnoreCase);
+        if (roles.Count == 0) return new RoleSnapshot(env.Name, roles, [], defined);
 
         var privileges = new List<RolePrivilege>();
         foreach (var chunk in roles.Chunk(15))
@@ -32,7 +32,7 @@ internal static class RoleLoader
                 if (privNames.TryGetValue(r.S("privilegeid") ?? "", out var pn))
                     privileges.Add(new RolePrivilege(Guid.Parse(r.S("roleid")!), pn, (int)(r.Num("privilegedepthmask") ?? 0)));
         }
-        return new RoleSnapshot(env.Name, roles, privileges);
+        return new RoleSnapshot(env.Name, roles, privileges, defined);
     }
 }
 
@@ -65,18 +65,21 @@ public sealed class CompareRolesTool : Tool
             {
                 ["role"] = d.Role, ["kind"] = "privilege", ["privilege"] = d.Privilege, ["table"] = d.Table, ["access"] = d.Access,
                 [$"{a.Name}"] = d.DepthA, [$"{b.Name}"] = d.DepthB,
-                ["change"] = d.Change.Replace("in A", "in " + a.Name).Replace("in B", "in " + b.Name), ["risk"] = d.Risk,
+                ["change"] = d.Change.Replace(" in A", " in " + a.Name).Replace(" in B", " in " + b.Name), ["risk"] = d.Risk,
             });
         rows = rows.OrderByDescending(r => (int)r["risk"]!).ToList();
 
         var compared = diff.Matches.Count(m => m.A is not null && m.B is not null);
         var higherInB = diff.Privileges.Count(p => p.Change is "higher in B" or "only in B");
+        var missingTables = diff.Privileges.Count(p => p.Change.StartsWith("table not in"));
+        var real = diff.Privileges.Count - missingTables;
         var warnings = new List<string>();
         if (names.Count > 0)
             foreach (var n in names.Where(n => !diff.Matches.Any(m => (m.A?.Name ?? m.B?.Name)?.Equals(n, StringComparison.OrdinalIgnoreCase) == true)))
                 warnings.Add($"Role '{n}' was not found in either environment.");
         var summary = $"Compared {compared} matched role(s) between {a.Name} and {b.Name}: {diff.Matches.Count(m => m.B is null)} only in {a.Name}, {diff.Matches.Count(m => m.A is null)} only in {b.Name}, " +
-                      $"{diff.Privileges.Count} privilege difference(s) ({higherInB} grant more access in {b.Name}), {diff.Settings.Count} setting difference(s).";
+                      $"{real} permission difference(s) ({higherInB} grant more access in {b.Name}), {diff.Settings.Count} setting difference(s); " +
+                      $"{missingTables} more are for tables that exist in only one environment (component difference, not a permission difference).";
         return new ToolResult
         {
             Summary = summary, Data = rows.Take(40).ToList(), RowCount = rows.Count, Truncated = rows.Count > 40, FullData = rows,

@@ -129,7 +129,12 @@ public sealed class DataverseReader : IDataverseReader
                 }
                 var body = await resp.Content.ReadAsStringAsync(ct);
                 if (!resp.IsSuccessStatusCode)
-                    throw new DataverseException((int)resp.StatusCode, ExtractError(body), uri.PathAndQuery);
+                {
+                    var error = ExtractError(body);
+                    if (error.Contains("was not found in the MetadataCache", StringComparison.OrdinalIgnoreCase))
+                        error = "A table referenced in the query does not exist in this environment. " + error;
+                    throw new DataverseException((int)resp.StatusCode, error, uri.PathAndQuery);
+                }
                 return JsonDocument.Parse(body);
             }
         }

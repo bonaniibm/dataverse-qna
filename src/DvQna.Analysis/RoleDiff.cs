@@ -6,7 +6,8 @@ public sealed record RoleInfo(Guid RoleId, string Name, Guid? TemplateId, int? I
 /// <summary>One privilege granted to a role, identified by privilege name (never object type code).</summary>
 public sealed record RolePrivilege(Guid RoleId, string PrivilegeName, int DepthMask);
 
-public sealed record RoleSnapshot(string EnvName, IReadOnlyList<RoleInfo> Roles, IReadOnlyList<RolePrivilege> Privileges);
+/// <summary>Roles and their privileges in one environment. <c>DefinedPrivileges</c> lists every privilege that exists there (null = unknown).</summary>
+public sealed record RoleSnapshot(string EnvName, IReadOnlyList<RoleInfo> Roles, IReadOnlyList<RolePrivilege> Privileges, IReadOnlySet<string>? DefinedPrivileges = null);
 
 public sealed record RoleMatch(RoleInfo? A, RoleInfo? B, string MatchedBy);
 
@@ -104,11 +105,16 @@ public static class RoleDiff
                 var hasB = pb.TryGetValue(name, out var db);
                 if (hasA && hasB && DepthRank(da) == DepthRank(db)) continue;
                 var (access, table) = ParsePrivilege(name);
-                var change = !hasA ? "only in B" : !hasB ? "only in A"
+                // A privilege that does not exist at all on one side means the table (solution) is missing there,
+                // which is a component difference, not a permission difference.
+                var missingTable = (!hasA && a.DefinedPrivileges is { } defA && !defA.Contains(name))
+                                   || (!hasB && b.DefinedPrivileges is { } defB && !defB.Contains(name));
+                var change = missingTable ? (!hasA ? "table not in A" : "table not in B")
+                    : !hasA ? "only in B" : !hasB ? "only in A"
                     : DepthRank(db) > DepthRank(da) ? "higher in B" : "lower in B";
                 diffs.Add(new PrivilegeDiff(roleName, name, table, access,
                     hasA ? DepthName(da) : null, hasB ? DepthName(db) : null, change,
-                    Risk(access, table, hasA ? da : 0, hasB ? db : 0)));
+                    missingTable ? 0 : Risk(access, table, hasA ? da : 0, hasB ? db : 0)));
             }
         }
         return new RoleDiffResult(matches, diffs.OrderByDescending(d => d.Risk).ThenBy(d => d.Role).ThenBy(d => d.Privilege).ToList(), settings);
