@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DvQna.Agent/DvQna.Agent.csproj" />
+    <Project Path="src/DvQna.Analysis/DvQna.Analysis.csproj" />
+    <Project Path="src/DvQna.Auth/DvQna.Auth.csproj" />
+    <Project Path="src/DvQna.Connectors/DvQna.Connectors.csproj" />
+    <Project Path="src/DvQna.Core/DvQna.Core.csproj" />
+    <Project Path="src/DvQna.Host/DvQna.Host.csproj" />
+    <Project Path="src/DvQna.Storage/DvQna.Storage.csproj" />
+    <Project Path="src/DvQna.Tools/DvQna.Tools.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DvQna.Tests/DvQna.Tests.csproj" />
+  </Folder>
+</Solution>

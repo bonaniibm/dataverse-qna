@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+.vs/
+node_modules/
+web/dist/
+src/DvQna.Host/wwwroot/
+TestResults/
+*.log
+.env
+publish/
