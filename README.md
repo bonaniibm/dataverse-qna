@@ -6,6 +6,8 @@ from live diagnostic data: plug-in steps and trace logs, system jobs, flow runs,
 
 See [docs/technical-design.md](docs/technical-design.md) for the full design.
 
+![Demo: a health check on ORG72, then asking the assistant about async queue health and opening the evidence table](docs/media/dataverse-qna-demo.gif)
+
 ## What's in the box
 
 | Area | Tools |
